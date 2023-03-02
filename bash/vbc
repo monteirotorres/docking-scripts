@@ -1,0 +1,174 @@
+#!/bin/bash
+echo
+echo "##############################################"
+echo "#              VinaBatchCluster              #"
+echo "#               TORRES, P.H.M.               #"
+echo "#                 11-9-2017                  #"
+echo "##############################################"
+echo "#                                            #"
+echo "# This script is intended to perform several #"
+echo "# docking runs using VINA, then rescore the  #"
+echo "#   poses using oddt-cli and cluster them    #"
+echo "# using GROMACS gmx cluster. The output is a #"
+echo "# sdf file containing a column corresponding #"
+echo "#  to the cluster ID. Please make sure oddt, #"
+echo "#   gromacs, babel and vina are installed.   #"
+echo "#                                            #"
+echo "##############################################"
+echo "#                                            #"
+echo "# Usage:                                     #"
+echo "# ./vcb lig rec vinaconf #runs cutoff        #"
+echo "#                                            #"
+echo "# To remove previously generated files:      #"
+echo "# ./vbc rm                                   #"
+echo "#                                            #"
+echo "##############################################"
+echo
+
+#################
+# GET PARAM FROM
+# CMD LINE OR ASK
+# AND CHECK if
+# EXISTS
+#################
+
+ligand=${1}
+receptor=${2}
+config=${3}
+runs=${4}
+cutoff=${5}
+
+
+if [ -z ${1+x} ]; then
+    echo 
+    echo "Please provide the name of the ligand pdbqt file."
+    echo
+    read ligand
+fi
+
+if [ ${1} == 'rm' ]; then
+    rm -rf vbcrun* allposes.pdb allposes.pdbqt rmsd-dist.xvg rmsd-clust.xpm clusterinfo.out cluster.log clusters.pdb *clid.xvg RFScore_v3_pdbbind2015.pickle *Rescored.sdf
+    echo "Files successfully removed."
+    echo
+    exit
+fi
+
+if [ ! -f ${ligand} ]; then
+    echo "File ${ligand} not found!"
+    exit
+fi
+
+if [ -z ${2+x} ]; then
+    echo 
+    echo "Please provide the name of the receptor pdbqt file."
+    echo
+    read receptor
+fi
+
+if [ ! -f ${receptor} ]; then
+    echo "File ${receptor} not found!"
+    exit
+fi
+
+if [ -z ${3+x} ]; then
+    echo
+    echo "Please provide the name of the vina configuration file."
+    echo
+    read config
+fi
+
+if [ ! -f ${config} ]; then
+    echo "File ${config} not found!"
+    exit
+fi
+
+if [ -z ${4+x} ]; then
+    echo 
+    echo "How many times should VINA be run with the conf.txt parameters?"
+    echo
+    read runs
+fi
+
+if [ -z ${5+x} ]; then
+    echo
+    echo "Choose RMSD cut-off for clustering final poses"
+    echo
+    read cutoff
+fi
+
+echo
+
+ligand=`echo $ligand | sed 's/.pdbqt//'`
+
+receptor=`echo $receptor | sed 's/.pdbqt//'`
+
+echo
+echo
+echo "######################################"
+echo "######################################"
+echo "##"
+echo "## Your ligand is ${ligand}" 
+echo "## Your receptor is ${receptor}" 
+echo "## Your configuration file is ${config}"
+echo "##"
+echo "## The cut-off you have chosen for" 
+echo "## GMX clustering (gromos method)" 
+echo "## is of ${cutoff}."
+echo "##"
+echo "## VINA will be run ${runs} times"
+echo "##"
+echo "######################################"
+echo "######################################"
+echo
+echo 
+echo
+
+#################
+# DOCK WITH VINA
+# CONVERT OUTPUT
+#  USING BABEL
+# MAKE MULTI-PDB
+# AND MULTI-PDBQT
+#################
+
+for i in `seq 1 ${runs}`; do
+    mkdir vbcrun$i
+    cd vbcrun$i
+    cp ../*.pdbqt .
+    cp ../conf.txt .
+    vina --config ${config}
+    babel -ipdbqt ${ligand}_out.pdbqt -opdb ${ligand}_out.pdb
+    cat ${ligand}_out.pdb >> ../allposes.pdb
+    cat ${ligand}_out.pdbqt >> ../allposes.pdbqt
+    cd ..
+done
+
+#################
+# CLUSTER W/ GMX
+#################
+
+gmx cluster -f allposes.pdb -s allposes.pdb -clid ${ligand}-clid.xvg -nofit -method gromos -cutoff ${cutoff} -cl clusters.pdb <<EOF
+1
+1
+EOF
+tail -n +20 ${ligand}-clid.xvg > clusterinfo.out
+
+
+#################
+# ADD CLUSTER AS
+# REMARK IN PDB
+#################
+
+sed -i '/VINA/a inserirclusteraqui' allposes.pdbqt
+
+cat clusterinfo.out | while read a b; do 
+    sed -i "0,/inserirclusteraqui/s//CLUSTR\ $b/" allposes.pdbqt  ;
+done
+
+ 
+#################
+# RESCORE W/ ODDT
+#################
+
+oddt_cli -i pdbqt --score rfscore_v3_pdbbind2015 --receptor ${receptor}.pdbqt -o sdf -O ${ligand}-Rescored.sdf allposes.pdbqt
+    
