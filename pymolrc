@@ -1,0 +1,26 @@
+import psico.fullinit
+set ray_opaque_background, 0
+set ray_shadows, 0
+set ray_trace_mode, 1
+set ray_trace_color, 1
+set antialias, 3
+set orthoscopic, 1
+set assembly, 1
+set seq_view, 1
+#set seq_view_format, 3
+set pdb_echo_tags, "HEADER,TITLE,COMPND,REMARK"
+set fetch_type_default, pdb
+set dot_density, 4
+set trim_dots, 0
+set dot_width, 1
+set dot_lighting, 0
+set dot_color, gray60
+alias whiteligs, as lines; util.cbab pol. ; util.cbaw not pol
+alias ligandsite, preset.ligand_sites_mesh(selection='all'); cmd.hide('ribbon'); cmd.show('cartoon'); util.cbak not pol
+alias publication, preset.publication(selection='all')
+alias putty, preset.b_factor_putty(selection='all')
+set_key F1, publication
+set_key F2, putty
+set_key F3, whiteligs
+set_key F4, ligandsite
+
